@@ -14,6 +14,8 @@ const connectToDB = async () => {
     await mongoose.connect(process.env.MONGODB_URL, {
       dbName: "waterTour",
       writeConcern: { w: "majority" },
+  serverSelectionTimeoutMS: 5000,
+  socketTimeoutMS: 45000,
     });
     isConnected = true;
     console.log("==> Mongo Successfully connected");

@@ -3,7 +3,7 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
-const Houseboat = require("./models/Houseboat")
+const Houseboat = require("./models/Houseboat");
 const { connectToDB } = require("./database");
 
 const app = express();
@@ -12,28 +12,59 @@ const io = new Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] },
 });
 
-// Connect to MongoDB first
-connectToDB().then(() => {
-  console.log("==> Setting up Change Stream...");
+// Function to watch MongoDB changes
+async function watchChanges() {
+  try {
+    await connectToDB();
+    console.log("==> Connected to MongoDB, Setting up Change Stream...");
 
-  // Ensure the collection exists before watching changes
-  const houseboatCollection = mongoose.connection.collection("houseboats");
-  const changeStream = houseboatCollection.watch();
+    const houseboatCollection = mongoose.connection.collection("houseboats");
+    const changeStream = houseboatCollection.watch();
 
-  changeStream.on("change", (change) => {
-    if (change.operationType === "update") {
-      const updatedFields = change.updateDescription.updatedFields;
+    changeStream.on("change", (change) => {
+console.log("Sucess 1")
+      if (change.operationType === "update") {
+        console.log("Sucess 2")
+        const updatedFields = change.updateDescription.updatedFields;
+        // Check if relevant fields changed
+        console.log(updatedFields)
+        console.log(updatedFields.dates)
+        if (
+          updatedFields !== undefined
+        ) {
+          const houseboatId = change.documentKey._id;
+          console.log("Sucess 3")
+          // Emit the updated fields to clients
+          io.emit("houseboatUpdated", {
+            houseboatId,
+            updatedFields
+          });
+          console.log("Sucess 4")
 
-      if (updatedFields.price) {
-        const houseboatId = change.documentKey._id;
-        const newPrice = updatedFields.price;
-
-        console.log(`Price updated for houseboat ${houseboatId}: ₹${newPrice}`);
-        io.emit("priceUpdated", { houseboatId, newPrice });
+          console.log(`Emitted update for houseboat ${houseboatId}:`, updatedFields);
+        }
       }
-    }
-  });
-});
+    });
+
+    changeStream.on("error", (err) => {
+      console.error("Change Stream Error:", err);
+      setTimeout(() => {
+        console.log("Reconnecting to Change Stream...");
+        watchChanges(); // Reinitialize the change stream
+      }, 3000);
+    });
+
+  } catch (error) {
+    console.error("Error setting up Change Stream:", error);
+    setTimeout(() => {
+      console.log("Retrying Change Stream setup...");
+      watchChanges();
+    }, 5000);
+  }
+}
+
+// Start watching changes
+watchChanges();
 
 // Handle client connections
 io.on("connection", (socket) => {
@@ -52,7 +83,6 @@ io.on("connection", (socket) => {
     console.log("Client disconnected:", socket.id);
   });
 });
-
 
 // Start the server
 const PORT = 3001;
