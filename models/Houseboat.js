@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+const mongoose = require("mongoose");
 
 const HouseboatSchema = new mongoose.Schema(
     {
@@ -43,4 +43,4 @@ const HouseboatSchema = new mongoose.Schema(
 // Ensure the model is only created once
 const Houseboat = mongoose.models.Houseboat || mongoose.model("Houseboat", HouseboatSchema);
 
-export default Houseboat;
+module.exports =Houseboat

@@ -3,6 +3,7 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
+const Houseboat = require("./models/Houseboat")
 const { connectToDB } = require("./database");
 
 const app = express();
@@ -38,10 +39,20 @@ connectToDB().then(() => {
 io.on("connection", (socket) => {
   console.log("Client connected:", socket.id);
 
+  socket.on("getHouseboat", async (houseboatId) => {
+    try {
+      const houseboat = await Houseboat.findById(houseboatId);
+      socket.emit("houseboatData", houseboat);
+    } catch (error) {
+      console.error("Error fetching houseboat data:", error);
+    }
+  });
+
   socket.on("disconnect", () => {
     console.log("Client disconnected:", socket.id);
   });
 });
+
 
 // Start the server
 const PORT = 3001;
