@@ -4,6 +4,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
 const Houseboat = require("./models/Houseboat");
+const Booking = require("./models/Booking"); // Import Booking model
 const { connectToDB } = require("./database");
 
 const app = express();
@@ -19,63 +20,84 @@ async function watchChanges() {
     console.log("==> Connected to MongoDB, Setting up Change Stream...");
 
     const houseboatCollection = mongoose.connection.collection("houseboats");
-    const changeStream = houseboatCollection.watch();
+    const bookingCollection = mongoose.connection.collection("bookings");
 
-    changeStream.on("change", (change) => {
-console.log("Sucess 1")
+    const houseboatStream = houseboatCollection.watch();
+    const bookingStream = bookingCollection.watch();
+
+    // Watching Houseboat updates
+    houseboatStream.on("change", (change) => {
       if (change.operationType === "update") {
-        console.log("Sucess 2")
+        console.log("Houseboat update detected.");
         const updatedFields = change.updateDescription.updatedFields;
-        // Check if relevant fields changed
-        console.log(updatedFields)
-        console.log(updatedFields.dates)
-        if (
-          updatedFields !== undefined
-        ) {
+        if (updatedFields !== undefined) {
           const houseboatId = change.documentKey._id;
-          console.log("Sucess 3")
-          // Emit the updated fields to clients
-          io.emit("houseboatUpdated", {
-            houseboatId,
-            updatedFields
-          });
-          console.log("Sucess 4")
-
+          io.emit("houseboatUpdated", { houseboatId, updatedFields });
           console.log(`Emitted update for houseboat ${houseboatId}:`, updatedFields);
         }
       }
     });
 
-    changeStream.on("error", (err) => {
-      console.error("Change Stream Error:", err);
-      setTimeout(() => {
-        console.log("Reconnecting to Change Stream...");
-        watchChanges(); // Reinitialize the change stream
-      }, 3000);
+    // Watching Booking updates
+    bookingStream.on("change", (change) => {
+      if (["insert", "update", "delete"].includes(change.operationType)) {
+        console.log("Booking change detected.");
+        const updatedFields = change.updateDescription.updatedFields;
+        if (updatedFields !== undefined) {
+          const bookingId = change.documentKey._id;
+          console.log(bookingId);
+          io.emit("bookingUpdated", {bookingId,updatedFields});
+        }
+      }
     });
 
+    // Handle errors
+    houseboatStream.on("error", handleChangeStreamError);
+    bookingStream.on("error", handleChangeStreamError);
   } catch (error) {
     console.error("Error setting up Change Stream:", error);
-    setTimeout(() => {
-      console.log("Retrying Change Stream setup...");
-      watchChanges();
-    }, 5000);
+    setTimeout(watchChanges, 5000);
   }
 }
 
-// Start watching changes
+// Error handler for Change Stream
+function handleChangeStreamError(err) {
+  console.error("Change Stream Error:", err);
+  setTimeout(watchChanges, 3000);
+}
+
+// Start watching MongoDB changes
 watchChanges();
 
 // Handle client connections
-io.on("connection", (socket) => {
+io.on("connection", async (socket) => {
   console.log("Client connected:", socket.id);
 
-  socket.on("getHouseboat", async (houseboatId) => {
+  // Fetch all bookings when a client connects
+
+
+  // Fetch bookings manually if requested
+  socket.on("fetchBookings", async (ownerId) => {
     try {
-      const houseboat = await Houseboat.findById(houseboatId);
-      socket.emit("houseboatData", houseboat);
+      console.log(ownerId.ownerId)
+      const bookings = await Booking.find({ownerId:ownerId.ownerId}).sort({createdAt:-1}).populate("houseboatId", "name");
+      bookings.map((b) => ({
+        _id: b._id,
+        houseboat: {
+            name: b.houseboatId.name,
+            location: b.houseboatId.location,
+            image: b.houseboatId.images,
+        },
+        date: b.date,
+        status: b.status,
+        guests: b.guests,
+        beds: b.beds,
+        type: b.type,
+        totalPrice: b.totalPrice,
+    })),
+      socket.emit("initialBookings", bookings);
     } catch (error) {
-      console.error("Error fetching houseboat data:", error);
+      console.error("Error fetching bookings:", error);
     }
   });
 
