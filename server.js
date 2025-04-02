@@ -13,6 +13,7 @@ const io = new Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] },
 });
 
+connectToDB().then()
 // Function to watch MongoDB changes
 async function watchChanges() {
   try {
@@ -70,12 +71,15 @@ function handleChangeStreamError(err) {
 watchChanges();
 
 // Handle client connections
-io.on("connection", async (socket) => {
-  console.log("Client connected:", socket.id);
-
-  // Fetch all bookings when a client connects
-
-
+io.on("connection", async (socket) => {  
+    socket.on("getHouseboat", async (houseboatId) => {
+      try {
+        const houseboat = await Houseboat.findById(houseboatId);
+        socket.emit("houseboatData", houseboat);
+      } catch (error) {
+        console.error("Error fetching houseboat data:", error);
+      }
+    });
   // Fetch bookings manually if requested
   socket.on("fetchBookings", async (ownerId) => {
     try {
