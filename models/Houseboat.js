@@ -10,10 +10,11 @@ const HouseboatSchema = new mongoose.Schema(
         name: { type: String, required: true },
         description: { type: String, required: true },
         location: { type: String, required: true },
-        beds: { type: Number, required: true }, // Changed to Number
-        maxPeople: { type: Number, required: true }, // Changed to Number
-        price: { type: Number, required: true }, // Changed to Number
+        beds: { type: Number, required: true },
+        maxPeople: { type: Number, required: true },
+        price: { type: Number, required: true },
         rating: { type: Number, default: 3 },
+        rateCount: { type: Number, default: 0 },
         dates: {
             type: Map,
             of: new mongoose.Schema({
@@ -21,6 +22,8 @@ const HouseboatSchema = new mongoose.Schema(
                 available: Boolean,
                 dayCruiser: Boolean,
                 nightStay: Boolean,
+                dayCruiserBooked: { type: Boolean, default: false },
+                nightStayBooked: { type: Boolean, default: false },
                 pricePerDay: Number,
                 pricePerNight: Number,
                 extraPricePerBed: Number,
@@ -29,8 +32,8 @@ const HouseboatSchema = new mongoose.Schema(
         },
         amenities: { type: [String], required: true },
         food: {
-            veg: { type: [String], required: true }, // Fixed 'require' to 'required'
-            nonVeg: { type: [String], required: true }, // Fixed 'require' to 'required'
+            veg: { type: [String], required: true },
+            nonVeg: { type: [String], required: true },
         },
         images: { type: [String], required: true },
         isAvailable: { type: Boolean, default: true },
@@ -40,7 +43,6 @@ const HouseboatSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
-// Ensure the model is only created once
 const Houseboat = mongoose.models.Houseboat || mongoose.model("Houseboat", HouseboatSchema);
 
-module.exports =Houseboat
+module.exports = Houseboat;

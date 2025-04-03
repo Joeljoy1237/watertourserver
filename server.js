@@ -17,8 +17,7 @@ connectToDB().then()
 // Function to watch MongoDB changes
 async function watchChanges() {
   try {
-    await connectToDB();
-    console.log("==> Connected to MongoDB, Setting up Change Stream...");
+    
 
     const houseboatCollection = mongoose.connection.collection("houseboats");
     const bookingCollection = mongoose.connection.collection("bookings");
@@ -62,9 +61,12 @@ async function watchChanges() {
 }
 
 // Error handler for Change Stream
-function handleChangeStreamError(err) {
+ function handleChangeStreamError(err) {
   console.error("Change Stream Error:", err);
-  setTimeout(watchChanges, 3000);
+   connectToDB().then(() => {
+    console.log("==> Connected to MongoDB, Setting up Change Stream...");
+    setTimeout(watchChanges, 3000);
+  });
 }
 
 // Start watching MongoDB changes
