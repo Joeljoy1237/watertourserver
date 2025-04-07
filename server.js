@@ -2,10 +2,9 @@ require("dotenv").config();
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
-const mongoose = require("mongoose");
-const Houseboat = require("./models/Houseboat");
-const Booking = require("./models/Booking"); // Import Booking model
 const { connectToDB } = require("./database");
+const registerSocketHandlers = require("./sockets/socketHandlers");
+const watchChanges = require("./watchers/mongoWatcher");
 
 const app = express();
 const server = http.createServer(app);
@@ -13,113 +12,21 @@ const io = new Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] },
 });
 
-connectToDB().then(() => {
-  console.log("Connected to MongoDB");
-}).catch((error) => {
-  console.error("Error connecting to MongoDB:", error);
-});
-// Function to watch MongoDB changes
-async function watchChanges() {
-  try {
-    
-    if (mongoose.connection.readyState === 1) {
-     const houseboatCollection= mongoose.connection.collection("houseboat");
-      const houseboatStream = houseboatCollection.watch();
-      const bookingCollection = mongoose.connection.collection("bookings");
-      const bookingStream = bookingCollection.watch();
+app.use(express.json()); // important for parsing JSON body
+app.use("/push", require("./routes/push"));
 
-      // Watching Houseboat updates
-      houseboatStream.on("change", (change) => {
-        if (change.operationType === "update") {
-          console.log("Houseboat update detected.");
-          const updatedFields = change.updateDescription.updatedFields;
-          if (updatedFields !== undefined) {
-            const houseboatId = change.documentKey._id;
-            io.emit("houseboatUpdated", { houseboatId, updatedFields });
-            console.log(`Emitted update for houseboat ${houseboatId}:`, updatedFields);
-          }
-        }
-      });
-
-      // Watching Booking updates
-      bookingStream.on("change", (change) => {
-        if (["insert", "update", "delete"].includes(change.operationType)) {
-          console.log("Booking change detected.");
-          const updatedFields = change.updateDescription.updatedFields;
-          if (updatedFields !== undefined) {
-            const bookingId = change.documentKey._id;
-            console.log(bookingId);
-            io.emit("bookingUpdated", { bookingId, updatedFields });
-          }
-        }
-      });
-
-      // Handle errors
-      houseboatStream.on("error", handleChangeStreamError);
-      bookingStream.on("error", handleChangeStreamError);
-    } else {
-      throw new Error("MongoDB is not connected. Ensure it is running as a replica set.");
-    }
-  } catch (error) {
-    console.error("Error setting up Change Stream:", error);
-    setTimeout(watchChanges, 5000);
-  }
-}
-
-// Error handler for Change Stream
- function handleChangeStreamError(err) {
-  console.error("Change Stream Error:", err);
-   connectToDB().then(() => {
-    console.log("==> Connected to MongoDB, Setting up Change Stream...");
-    setTimeout(watchChanges, 3000);
-  });
-}
-
-// Start watching MongoDB changes
-watchChanges();
-
-// Handle client connections
-io.on("connection", async (socket) => {  
-    socket.on("getHouseboat", async (houseboatId) => {
-      try {
-        const houseboat = await Houseboat.findById(houseboatId);
-        socket.emit("houseboatData", houseboat);
-      } catch (error) {
-        console.error("Error fetching houseboat data:", error);
-      }
-    });
-  // Fetch bookings manually if requested
-  socket.on("fetchBookings", async (ownerId) => {
-    try {
-      console.log(ownerId.ownerId)
-      const bookings = await Booking.find({ownerId:ownerId.ownerId}).sort({createdAt:-1}).populate("houseboatId", "name");
-      bookings.map((b) => ({
-        _id: b._id,
-        houseboat: {
-            name: b.houseboatId.name,
-            location: b.houseboatId.location,
-            image: b.houseboatId.images,
-        },
-        date: b.date,
-        status: b.status,
-        guests: b.guests,
-        beds: b.beds,
-        type: b.type,
-        totalPrice: b.totalPrice,
-    })),
-      socket.emit("initialBookings", bookings);
-    } catch (error) {
-      console.error("Error fetching bookings:", error);
-    }
+connectToDB()
+  .then(() => {
+    console.log("✅ Connected to MongoDB");
+    watchChanges(io); // watch changes after DB is ready
+  })
+  .catch((error) => {
+    console.error("❌ MongoDB connection error:", error);
   });
 
-  socket.on("disconnect", () => {
-    console.log("Client disconnected:", socket.id);
-  });
-});
+io.on("connection", (socket) => registerSocketHandlers(socket));
 
-// Start the server
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
-  console.log(`Socket server running on http://localhost:${PORT}`);
+  console.log(`🚀 Socket server running at http://localhost:${PORT}`);
 });
