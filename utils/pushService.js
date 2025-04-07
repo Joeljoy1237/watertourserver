@@ -12,6 +12,7 @@ webpush.setVapidDetails(
  * @param {Object} payload - The payload to send (object)
  */
 async function sendPushNotification(subscription, payload) {
+  console.log("new notifiaction send!!");
   try {
     const result = await webpush.sendNotification(
       subscription,
