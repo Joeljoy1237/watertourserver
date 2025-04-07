@@ -13,47 +13,53 @@ const io = new Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] },
 });
 
-connectToDB().then()
+connectToDB().then(() => {
+  console.log("Connected to MongoDB");
+}).catch((error) => {
+  console.error("Error connecting to MongoDB:", error);
+});
 // Function to watch MongoDB changes
 async function watchChanges() {
   try {
     
+    if (mongoose.connection.readyState === 1) {
+     const houseboatCollection= mongoose.connection.collection("houseboat");
+      const houseboatStream = houseboatCollection.watch();
+      const bookingCollection = mongoose.connection.collection("bookings");
+      const bookingStream = bookingCollection.watch();
 
-    const houseboatCollection = mongoose.connection.collection("houseboats");
-    const bookingCollection = mongoose.connection.collection("bookings");
-
-    const houseboatStream = houseboatCollection.watch();
-    const bookingStream = bookingCollection.watch();
-
-    // Watching Houseboat updates
-    houseboatStream.on("change", (change) => {
-      if (change.operationType === "update") {
-        console.log("Houseboat update detected.");
-        const updatedFields = change.updateDescription.updatedFields;
-        if (updatedFields !== undefined) {
-          const houseboatId = change.documentKey._id;
-          io.emit("houseboatUpdated", { houseboatId, updatedFields });
-          console.log(`Emitted update for houseboat ${houseboatId}:`, updatedFields);
+      // Watching Houseboat updates
+      houseboatStream.on("change", (change) => {
+        if (change.operationType === "update") {
+          console.log("Houseboat update detected.");
+          const updatedFields = change.updateDescription.updatedFields;
+          if (updatedFields !== undefined) {
+            const houseboatId = change.documentKey._id;
+            io.emit("houseboatUpdated", { houseboatId, updatedFields });
+            console.log(`Emitted update for houseboat ${houseboatId}:`, updatedFields);
+          }
         }
-      }
-    });
+      });
 
-    // Watching Booking updates
-    bookingStream.on("change", (change) => {
-      if (["insert", "update", "delete"].includes(change.operationType)) {
-        console.log("Booking change detected.");
-        const updatedFields = change.updateDescription.updatedFields;
-        if (updatedFields !== undefined) {
-          const bookingId = change.documentKey._id;
-          console.log(bookingId);
-          io.emit("bookingUpdated", {bookingId,updatedFields});
+      // Watching Booking updates
+      bookingStream.on("change", (change) => {
+        if (["insert", "update", "delete"].includes(change.operationType)) {
+          console.log("Booking change detected.");
+          const updatedFields = change.updateDescription.updatedFields;
+          if (updatedFields !== undefined) {
+            const bookingId = change.documentKey._id;
+            console.log(bookingId);
+            io.emit("bookingUpdated", { bookingId, updatedFields });
+          }
         }
-      }
-    });
+      });
 
-    // Handle errors
-    houseboatStream.on("error", handleChangeStreamError);
-    bookingStream.on("error", handleChangeStreamError);
+      // Handle errors
+      houseboatStream.on("error", handleChangeStreamError);
+      bookingStream.on("error", handleChangeStreamError);
+    } else {
+      throw new Error("MongoDB is not connected. Ensure it is running as a replica set.");
+    }
   } catch (error) {
     console.error("Error setting up Change Stream:", error);
     setTimeout(watchChanges, 5000);
